@@ -1,67 +1,10 @@
 
-class Piece {
-    static sprites = {}
-
-    constructor(value) {
-        this.numeric_value = value
-        this.targetable = false
-        this.moves = 0
-    }
-
-    static load_sprites() {
-        for(let img of document.getElementById('pieces').children) {
-            const id = img.getAttribute('id')
-            Piece.sprites[id] = img
-        }
-    }
-
-    get name() {
-        switch (this.numeric_value) {
-            case -6: return 'black_pawn'
-            case -5: return 'black_king'
-            case -4: return 'black_queen'
-            case -3: return 'black_horse'
-            case -2: return 'black_priest'
-            case -1: return 'black_tower'
-            default: return null
-            case  1: return 'white_tower'
-            case  2: return 'white_priest'
-            case  3: return 'white_horse'
-            case  4: return 'white_queen'
-            case  5: return 'white_king'
-            case  6: return 'white_pawn'
-        }
-    }
-
-    get sprite() {
-        return Piece.sprites[this.name]
-    }
-
-    is_black() {
-        return this.numeric_value < 0
-    }
-
-    is_empty() {
-        return this.numeric_value == 0
-    }
-
-    is_same(piece) {
-        return (this.numeric_value > 0 && piece.numeric_value > 0) ||
-            (this.numeric_value < 0 && piece.numeric_value < 0)
-    }
-
-    mark_as_target() {
-        this.targetable = true
-    }
-
-    reset_target() {
-        this.targetable = false
-    }
-}
+const sprites = {}
 
 const piece = {
     numeric_value: 0,
     targetable: false,
+    moves: 0,
 
     get name() {
         switch (this.numeric_value) {
@@ -82,8 +25,29 @@ const piece = {
     },
 
     get sprite() {
-        return Piece.sprites[this.name]
-    }
+        return sprites[this.name]
+    },
+
+    is_black() {
+        return this.numeric_value < 0
+    },
+
+    is_empty() {
+        return this.numeric_value == 0
+    },
+
+    is_same(piece) {
+        return (this.numeric_value > 0 && piece.numeric_value > 0) ||
+            (this.numeric_value < 0 && piece.numeric_value < 0)
+    },
+
+    mark_as_target() {
+        this.targetable = true
+    },
+
+    reset_target() {
+        this.targetable = false
+    },
 }
 
 const board = {
@@ -110,9 +74,18 @@ const board = {
         return this.matrix[this.selected_pos.x][this.selected_pos.y]
     },
 
+    set selected(value) {
+        this.matrix[this.selected_pos.x][this.selected_pos.y] = value
+    },
+
     handle_matrix(matrix) {
-        this.matrix = matrix.map(rows =>
-            rows.map(cols => new Piece(cols)))
+        this.matrix = matrix.map(cols =>
+            cols.map(cell => {
+                const obj = Object.create(piece)
+                obj.numeric_value = cell
+                return obj
+            })
+        )
     },
 
     draw(ctx) {
@@ -147,11 +120,13 @@ const board = {
     click(pos) {
         if (this.selected) {
             if (this.matrix[pos.x][pos.y].targetable) {
-                this.selected.moves++
-                this.matrix[pos.x][pos.y].numeric_value = this.selected.numeric_value
-                this.matrix[this.selected_pos.x][this.selected_pos.y].numeric_value = 0
+                let v = this.matrix[this.selected_pos.x][this.selected_pos.y]
+                let u = this.matrix[pos.x][pos.y]
+    
+                this.matrix[this.selected_pos.x][this.selected_pos.y] = u
+                this.matrix[pos.x][pos.y] = v
             }
-            
+
             this.selected_pos = null
             this.reset_odds()
         }
@@ -302,40 +277,43 @@ const board = {
 
     pawn() {
         const piece = this.selected
-
-        const dir = piece.is_black() ? -1 : 1
-
+        
         let sx = this.selected_pos.x
         let sy = this.selected_pos.y
-
+        
+        const dir = piece.is_black() ? -1 : 1
         sy += dir
         if (this.in_bounds(sx, sy)) {
-            let target = this.matrix[sx][sy]
-            
-            if (target.is_empty())
-                this.matrix[sx][sy].mark_as_target()
-            else {
-                sx = this.selected_pos.x + 1
-                if (this.in_bounds(sx, sy) && !target.is_same(piece) && target.is_empty())
-                    this.matrix[sx][sy].mark_as_target()
+            if (this.matrix[sx][sy].is_empty()) {
+                let target = this.matrix[sx][sy]
+                target.mark_as_target()
 
-                sx = this.selected_pos.x - 1
-                if (this.in_bounds(sx, sy) && !target.is_same(piece) && target.is_empty())
-                    this.matrix[sx][sy].mark_as_target()
+                sy += dir
+                if (this.in_bounds(sx, sy) && piece.moves == 0) {
+                    target = this.matrix[sx][sy]
 
-                return
+                    if (target.is_empty())
+                        target.mark_as_target()
+                }
+            }
+
+            sx = this.selected_pos.x + 1
+            if (this.in_bounds(sx, sy)) {
+                const target = this.matrix[sx][sy]
+
+                if (!target.is_same(piece) && !target.is_empty())
+                    target.mark_as_target()
+            }
+
+            sx = this.selected_pos.x - 1
+            if (this.in_bounds(sx, sy)) {
+                const target = this.matrix[sx][sy]
+
+                if (!target.is_same(piece) && !target.is_empty())
+                    target.mark_as_target()
             }
         }
-        else return
-
-        sy += dir
-        if (this.in_bounds(sx, sy) && piece.moves == 0) {
-            let target = this.matrix[sx][sy]
-
-            if (target.is_empty())
-                this.matrix[sx][sy].mark_as_target()
-        }
-    }
+    },
 }
 
 const canvas = document.getElementById('canvas')
@@ -344,10 +322,12 @@ const ctx = canvas.getContext('2d')
 function init() {
     canvas.width = board.width
     canvas.height = board.height
-
     canvas.addEventListener('click', onclick)
 
-    Piece.load_sprites()
+    for(let img of document.getElementById('pieces').children) {
+        const id = img.getAttribute('id')
+        sprites[id] = img
+    }
 
     board.handle_matrix([
         [ 1, 6, 0, 0, 0, 0,-6,-1 ], 
@@ -362,15 +342,10 @@ function init() {
 }
 
 function onclick(ev) {
-    const x = ev.offsetX
-    const y = ev.offsetY
-
-    const grid = {
-        x: Math.ceil(x / board.width * board.rows) - 1,
-        y: Math.ceil(y / board.height * board.cols) - 1
-    }
-
-    board.click(grid)
+    board.click({
+        x: Math.ceil(ev.offsetX / board.width * board.rows) - 1,
+        y: Math.ceil(ev.offsetY / board.height * board.cols) - 1
+    })
 }
 
 function loop() {
